@@ -1,0 +1,274 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Праздничная сцена</title>
+    <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/build/three.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/loaders/GLTFLoader.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@mediapipe/face_mesh/face_mesh.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@mediapipe/camera_utils/camera_utils.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/OrbitControls.js"></script>
+
+    <style>
+        body {
+            margin: 0;
+            height: 100vh;
+            /* Новый градиентный фон */
+            background: linear-gradient(180deg, #001a4d 0%, #0033cc 100%);
+            overflow: hidden;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+        }
+        
+        #status {
+            position: absolute;
+            top: 10px;
+            font-size: 1.5em;
+            color: white;
+            z-index: 100;
+        }
+        
+        .snowflake {
+            position: absolute;
+            color: white;
+            font-size: 1em;
+            user-select: none;
+            pointer-events: none;
+            animation: fall linear infinite;
+        }
+        
+        @keyframes fall {
+            0% {
+                transform: translateY(-100vh) rotate(0deg);
+            }
+            100% {
+                transform: translateY(100vh) rotate(360deg);
+            }
+        }
+    </style>
+</head>
+<body>
+    <p id="status">Загрузка...</p>
+
+    <script>
+        // Основные настройки Three.js
+        const scene = new THREE.Scene();
+        const camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 1000);
+        const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
+
+        renderer.setSize(window.innerWidth, window.innerHeight);
+        renderer.setClearColor(0x000000, 0);
+        document.body.appendChild(renderer.domElement);
+
+        camera.position.z = 8;
+        camera.position.y = 2;
+
+        const controls = new THREE.OrbitControls(camera, renderer.domElement);
+        controls.enableDamping = true;
+        controls.dampingFactor = 0.05;
+        controls.minDistance = 3;
+        controls.maxDistance = 15;
+
+        // Создание месяца
+        function createMoon() {
+            const moonGeometry = new THREE.CircleGeometry(1.5, 32);
+            const moonMaterial = new THREE.MeshPhongMaterial({
+                color: 0xffffcc,
+                emissive: 0xffffcc,
+                emissiveIntensity: 0.5,
+            });
+            const moon = new THREE.Mesh(moonGeometry, moonMaterial);
+            
+            // Позиционируем месяц в левом верхнем углу
+            moon.position.set(-10, 8, -10);
+            // Поворачиваем для создания эффекта объема
+            moon.rotation.y = -0.5;
+            return moon;
+        }
+
+        // Добавляем месяц на сцену
+        const moon = createMoon();
+        scene.add(moon);
+
+        // Создание гирлянды
+        function createLights(treeObject) {
+            const lights = [];
+            const colors = [0xff0000, 0x00ff00, 0x0000ff, 0xffff00, 0xff00ff];
+            const numLights = 50;
+            
+            for(let i = 0; i < numLights; i++) {
+                const light = new THREE.PointLight(colors[i % colors.length], 0.5, 2);
+                // Располагаем огни по спирали вокруг ёлки
+                const angle = (i / numLights) * Math.PI * 8;
+                const radius = 1.5 - (i / numLights) * 0.5;
+                const height = (i / numLights) * 4;
+                
+                light.position.set(
+                    radius * Math.cos(angle),
+                    height,
+                    radius * Math.sin(angle)
+                );
+                
+                lights.push(light);
+                treeObject.add(light);
+            }
+            return lights;
+        }
+
+        // Анимация бегущих огней
+        function animateLights(lights, time) {
+            lights.forEach((light, index) => {
+                // Создаем эффект бегущих огней
+                const intensity = 0.5 + 0.5 * Math.sin(time * 3 + index * 0.2);
+                light.intensity = intensity;
+            });
+        }
+
+        const ambientLight = new THREE.AmbientLight(0xffffff, 0.5);
+        scene.add(ambientLight);
+
+        const directionalLight = new THREE.DirectionalLight(0xffffff, 0.8);
+        directionalLight.position.set(10, 10, 10);
+        scene.add(directionalLight);
+
+        let tree;
+        let treeLights = [];
+        const loader = new THREE.GLTFLoader();
+        loader.load(
+            'tree_model.glb',
+            function (gltf) {
+                tree = gltf.scene;
+                tree.scale.set(3, 3, 3);
+                scene.add(tree);
+                // Создаем гирлянду после загрузки модели
+                treeLights = createLights(tree);
+                document.getElementById('status').innerText = "Улыбнитесь, чтобы включить гирлянды!";
+            },
+            undefined,
+            function (error) {
+                console.error("Ошибка загрузки модели:", error);
+                document.getElementById('status').innerText = "Ошибка загрузки модели.";
+            }
+        );
+
+        let isSmiling = false;
+        let time = 0;
+
+        function animate() {
+            requestAnimationFrame(animate);
+            time += 0.01;
+            
+            if (tree && isSmiling) {
+                tree.rotation.y += 0.02;
+                // Анимируем гирлянду только при улыбке
+                animateLights(treeLights, time);
+            } else if (tree && !isSmiling) {
+                // Выключаем гирлянду
+                treeLights.forEach(light => light.intensity = 0);
+            }
+            
+            // Анимация месяца - легкое покачивание
+            if (moon) {
+                moon.rotation.z = Math.sin(time * 0.5) * 0.1;
+            }
+
+            controls.update();
+            renderer.render(scene, camera);
+        }
+
+        // Функции для снежинок остаются без изменений
+        function createSnowflake() {
+            const snowflake = document.createElement('div');
+            snowflake.className = 'snowflake';
+            snowflake.textContent = '❄';
+            snowflake.style.left = Math.random() * 100 + 'vw';
+            snowflake.style.animationDuration = Math.random() * 5 + 3 + 's';
+            snowflake.style.opacity = Math.random();
+            document.body.appendChild(snowflake);
+
+            snowflake.addEventListener('animationend', () => {
+                snowflake.remove();
+            });
+        }
+
+        setInterval(createSnowflake, 150);
+
+        // Остальной код для работы с камерой и определения улыбки остается без изменений
+        async function setupCamera() {
+            try {
+                const stream = await navigator.mediaDevices.getUserMedia({ video: true });
+                videoElement.srcObject = stream;
+                return new Promise(resolve => videoElement.onloadedmetadata = () => resolve(videoElement));
+            } catch (error) {
+                console.error("Ошибка при доступе к камере:", error);
+                document.getElementById('status').innerText = "Ошибка доступа к камере.";
+            }
+        }
+
+        const videoElement = document.createElement("video");
+        videoElement.width = 640;
+        videoElement.height = 480;
+        videoElement.autoplay = true;
+        videoElement.playsInline = true;
+        videoElement.style.display = "none";
+        document.body.appendChild(videoElement);
+
+        async function startFaceMeshDetection() {
+            const faceMesh = new FaceMesh({
+                locateFile: (file) => `https://cdn.jsdelivr.net/npm/@mediapipe/face_mesh/${file}`
+            });
+
+            faceMesh.setOptions({
+                maxNumFaces: 1,
+                refineLandmarks: true,
+                minDetectionConfidence: 0.5,
+                minTrackingConfidence: 0.5
+            });
+
+            faceMesh.onResults(onResults);
+
+            await setupCamera();
+
+            const camera = new Camera(videoElement, {
+                onFrame: async () => await faceMesh.send({ image: videoElement }),
+                width: 640,
+                height: 480
+            });
+
+            camera.start();
+        }
+
+        function calculateSmile(landmarks) {
+            const leftMouth = landmarks[61];
+            const rightMouth = landmarks[291];
+            const topMouth = landmarks[13];
+            const bottomMouth = landmarks[14];
+
+            const mouthWidth = Math.hypot(rightMouth.x - leftMouth.x, rightMouth.y - leftMouth.y);
+            const mouthHeight = Math.hypot(bottomMouth.x - topMouth.x, bottomMouth.y - topMouth.y);
+
+            return mouthHeight / mouthWidth > 0.2;
+        }
+
+        function onResults(results) {
+            if (results.multiFaceLandmarks && results.multiFaceLandmarks.length > 0) {
+                const faceLandmarks = results.multiFaceLandmarks[0];
+                isSmiling = calculateSmile(faceLandmarks);
+                document.getElementById('status').innerText = isSmiling ? "Вы улыбаетесь!" : "Улыбнитесь, чтобы включить гирлянды!";
+            }
+        }
+
+        startFaceMeshDetection().catch(error => console.error("Ошибка запуска FaceMesh:", error));
+
+        window.addEventListener('resize', () => {
+            renderer.setSize(window.innerWidth, window.innerHeight);
+            camera.aspect = window.innerWidth / window.innerHeight;
+            camera.updateProjectionMatrix();
+        });
+
+        animate();
+    </script>
+</body>
+</html>
